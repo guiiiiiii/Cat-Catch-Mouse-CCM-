@@ -1,0 +1,149 @@
+#include <Windows.h> 
+#include <TCHAR.H>
+#include "resource.h" 
+
+LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg,WPARAM wParam, LPARAM lParam);
+VOID CALLBACK  TimerProc(HWND hwnd, UINT uMsg,UINT idEvent, DWORD dwTime);
+void Draw(HWND hwnd);
+HINSTANCE hInst;
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+	LPSTR lpszCmdLine, int nCmdShow)
+{
+	HWND 	 hwnd;
+	MSG 	 msg;
+	WNDCLASS WndClass;
+	hInst = hInstance;
+	WndClass.style = CS_HREDRAW | CS_VREDRAW;
+	WndClass.lpfnWndProc = WndProc;
+	WndClass.cbClsExtra = 0;
+	WndClass.cbWndExtra = 0;
+	WndClass.hInstance = hInstance;
+	WndClass.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	WndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	WndClass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	WndClass.lpszMenuName = NULL;
+	WndClass.lpszClassName = _T("Window Class Name");
+	RegisterClass(&WndClass);
+	hwnd = CreateWindow(_T("Window Class Name"),
+		_T("Window Title Name"),
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT,
+		CW_USEDEFAULT,
+		600,
+		400,
+		NULL,
+		NULL,
+		hInstance,
+		NULL
+	);
+	ShowWindow(hwnd, nCmdShow);
+	UpdateWindow(hwnd);
+	while (GetMessage(&msg, NULL, 0, 0))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+	return (int)msg.wParam;
+}
+
+HBITMAP EmptyBmp, CatBmp, MouseBmp, oldBmpEmpty;
+BITMAP SizeofCatBmp, SizeofMouseBmp;
+RECT ClientSize;
+POINT MousePos, CatPos;
+BOOL isClicked;
+HDC  EmptyDC;
+LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
+{
+	HDC hdc;
+	PAINTSTRUCT ps;
+	switch (iMsg) {
+	case WM_CREATE:
+		isClicked = FALSE;
+		CatBmp = (HBITMAP)LoadBitmap(hInst, MAKEINTRESOURCE(IDB_CAT));
+		MouseBmp = (HBITMAP)LoadBitmap(hInst, MAKEINTRESOURCE(IDB_MOUSE));
+		GetObject(CatBmp, sizeof(BITMAP), &SizeofCatBmp);
+		GetObject(MouseBmp, sizeof(BITMAP), &SizeofMouseBmp);
+		GetClientRect(hwnd, &ClientSize);
+		CatPos.x = ClientSize.right / 2; CatPos.y = ClientSize.bottom / 2;
+		SetTimer(hwnd, 1, 70, TimerProc);
+		break;
+	case WM_MOUSEMOVE:
+		if (isClicked) {
+			MousePos.x = LOWORD(lParam);
+			MousePos.y = HIWORD(lParam);
+			Draw(hwnd);
+			InvalidateRect(hwnd, NULL, FALSE);
+		}
+		break;
+	case WM_LBUTTONDOWN:
+		isClicked = TRUE;
+		MousePos.x = LOWORD(lParam);
+		MousePos.y = HIWORD(lParam);
+		Draw(hwnd);
+		InvalidateRect(hwnd, NULL, FALSE);
+		break;
+	case WM_LBUTTONUP:
+		isClicked = FALSE;
+		break;
+	case WM_PAINT:
+		hdc = BeginPaint(hwnd, &ps);
+		BitBlt(hdc, 0, 0, ClientSize.right, ClientSize.bottom, EmptyDC, 0, 0, SRCCOPY);
+		EndPaint(hwnd, &ps);
+		break;
+	case WM_DESTROY:
+		DeleteObject(CatBmp);
+		DeleteObject(MouseBmp);
+		if (EmptyBmp)
+		{
+			SelectObject(EmptyDC, oldBmpEmpty);
+			DeleteObject(EmptyBmp);
+		}
+		PostQuitMessage(0);
+		break;
+	}
+	return DefWindowProc(hwnd, iMsg, wParam, lParam);
+}
+VOID CALLBACK  TimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime)
+{
+	if (isClicked)
+	{
+		if (CatPos.x < MousePos.x)
+			CatPos.x += 20;
+		else
+			CatPos.x -= 20;
+		if (CatPos.y < MousePos.y)
+			CatPos.y += 20;
+		else
+			CatPos.y -= 20;
+	}
+	Draw(hwnd);
+	InvalidateRect(hwnd, NULL, FALSE);
+}
+void Draw(HWND hwnd)
+{
+	HDC hdc, CatDC, MouseDC;
+	HBITMAP oldBmpCat, oldBmpMouse;
+	hdc = GetDC(hwnd);
+	if (EmptyBmp)
+	{
+		SelectObject(EmptyDC, oldBmpEmpty);
+		DeleteObject(EmptyBmp);
+	}
+	GetClientRect(hwnd, &ClientSize);
+	EmptyBmp = CreateCompatibleBitmap(hdc, ClientSize.right, ClientSize.bottom);
+	EmptyDC = CreateCompatibleDC(hdc);  oldBmpEmpty = (HBITMAP)SelectObject(EmptyDC, EmptyBmp);
+	CatDC = CreateCompatibleDC(hdc); oldBmpCat = (HBITMAP)SelectObject(CatDC, CatBmp);
+	MouseDC = CreateCompatibleDC(hdc); oldBmpMouse = (HBITMAP)SelectObject(MouseDC, MouseBmp);
+	PatBlt(EmptyDC, 0, 0, ClientSize.right, ClientSize.bottom, PATCOPY);
+	StretchBlt(EmptyDC, CatPos.x, CatPos.y, 50, 100,
+		CatDC, 0, 0, SizeofCatBmp.bmWidth, SizeofCatBmp.bmHeight, SRCCOPY);
+	if (isClicked)
+	{
+		StretchBlt(EmptyDC, MousePos.x, MousePos.y, 50, 50,
+			MouseDC, 0, 0, SizeofMouseBmp.bmWidth, SizeofMouseBmp.bmHeight, SRCCOPY);
+	}
+	SelectObject(CatDC, oldBmpCat);        DeleteDC(CatDC);
+	SelectObject(MouseDC, oldBmpMouse);    DeleteDC(MouseDC);
+	ReleaseDC(hwnd, hdc);
+}
